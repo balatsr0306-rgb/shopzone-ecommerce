@@ -1,13 +1,10 @@
-FROM node:18-alpine AS base
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-
 FROM node:18-alpine
 WORKDIR /app
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-COPY --from=base /app/node_modules ./node_modules
-COPY --chown=appuser:appgroup . .
+COPY package*.json ./
+RUN npm install --omit=dev
+COPY . .
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+    chown -R appuser:appgroup /app
 USER appuser
 EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

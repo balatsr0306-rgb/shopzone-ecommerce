@@ -58,4 +58,14 @@ const removeFromCart = async (req, res) => {
   }
 };
 
-module.exports = { getCart, addToCart, updateCart, removeFromCart };
+// DELETE /api/cart  — clear entire cart (Fix: was missing, routes expects cartCtrl.clearCart)
+const clearCart = async (req, res) => {
+  try {
+    await pool.query('DELETE FROM cart WHERE user_id=$1', [req.user.id]);
+    res.json({ message: 'Cart cleared' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = { getCart, addToCart, updateCart, removeFromCart, clearCart };
