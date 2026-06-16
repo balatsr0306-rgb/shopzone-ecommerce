@@ -1,0 +1,131 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ShopZone Backend — Deployment + Service + HPA
+# Namespace: shopzone
+# VPC: vpc-016ee8add8c12b1cf (shopzone-vpc)
+# Apply: kubectl apply -f k8s/backend-deployment.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopzone-backend
+  namespace: shopzone
+  labels:
+    app: shopzone-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shopzone-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: shopzone-backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: backend
+          # ── Replace ACCOUNT_ID with your AWS account ID ───────────────
+          image: ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/shopzone-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "5000"
+            # ── RDS endpoint (inside same VPC — private connectivity) ──
+            - name: DB_HOST
+              value: "YOUR-RDS-ENDPOINT.ap-south-1.rds.amazonaws.com"   # ← change
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "ecommerce"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shopzone-db-secret
+                  key: DB_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: shopzone-app-secret
+                  key: JWT_SECRET
+            - name: JWT_EXPIRES_IN
+              value: "7d"
+            - name: FRONTEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: shopzone-config
+                  key: FRONTEND_URL
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shopzone-backend
+  namespace: shopzone
+  labels:
+    app: shopzone-backend
+spec:
+  selector:
+    app: shopzone-backend
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+  type: ClusterIP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: shopzone-backend-hpa
+  namespace: shopzone
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: shopzone-backend
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

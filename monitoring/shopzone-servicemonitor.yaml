@@ -1,0 +1,67 @@
+# Prometheus ServiceMonitor — scrapes ShopZone backend /metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: shopzone-backend
+  namespace: monitoring
+  labels:
+    release: monitoring    # must match kube-prometheus-stack release name
+spec:
+  namespaceSelector:
+    matchNames:
+      - shopzone
+  selector:
+    matchLabels:
+      app: shopzone-backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+# PrometheusRule — alerting rules for ShopZone
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: shopzone-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: shopzone.backend
+      interval: 30s
+      rules:
+        - alert: ShopZoneBackendDown
+          expr: up{job="shopzone-backend"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ShopZone backend is down"
+            description: "No backend pods reachable for 2+ minutes."
+
+        - alert: ShopZoneHighErrorRate
+          expr: |
+            rate(http_requests_total{status_code=~"5.."}[5m])
+            /
+            rate(http_requests_total[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ShopZone error rate > 5%"
+            description: "More than 5% of requests returning 5xx errors."
+
+        - alert: ShopZoneSlowResponses
+          expr: |
+            histogram_quantile(0.95,
+              rate(http_request_duration_seconds_bucket[5m])
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ShopZone p95 latency > 2s"
+            description: "95th percentile response time exceeds 2 seconds."
