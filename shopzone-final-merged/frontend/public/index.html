@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="description" content="ShopZone — Shop the Best Deals Online" />
+    <meta property="og:title" content="ShopZone" />
+    <meta property="og:description" content="Discover thousands of products at amazing prices" />
+    <title>ShopZone</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      body { margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      #root { min-height: 100vh; }
+      /* Initial loading screen */
+      .initial-loader {
+        position: fixed; inset: 0; background: #1a1a2e;
+        display: flex; align-items: center; justify-content: center;
+        z-index: 9999; flex-direction: column; gap: 16px;
+      }
+      .initial-loader-logo { color: #e94560; font-size: 32px; font-weight: 700; }
+      .initial-loader-spinner {
+        width: 40px; height: 40px; border: 4px solid rgba(233,69,96,0.2);
+        border-top-color: #e94560; border-radius: 50%; animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run ShopZone.</noscript>
+    <div id="root">
+      <div class="initial-loader">
+        <div class="initial-loader-logo">🛒 ShopZone</div>
+        <div class="initial-loader-spinner"></div>
+      </div>
+    </div>
+  </body>
+</html>

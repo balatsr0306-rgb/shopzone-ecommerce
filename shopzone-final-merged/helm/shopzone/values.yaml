@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# helm/shopzone/values.yaml
+# VPC: vpc-016ee8add8c12b1cf  (shopzone-vpc  10.0.0.0/16)
+# Change the 3 lines marked ← change
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  imageRegistry: "ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com"   # ← change ACCOUNT_ID
+
+backend:
+  image:
+    repository: shopzone-backend
+    tag: latest
+    pullPolicy: Always
+  replicaCount: 2
+  port: 5000
+  env:
+    NODE_ENV: production
+    PORT: "5000"
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits:   { cpu: "500m", memory: "512Mi" }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+frontend:
+  image:
+    repository: shopzone-frontend
+    tag: latest
+    pullPolicy: Always
+  replicaCount: 2
+  port: 80
+  resources:
+    requests: { cpu: "50m",  memory: "64Mi"  }
+    limits:   { cpu: "200m", memory: "256Mi" }
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    # Pinned to shopzone-vpc public subnets — do not change these
+    alb.ingress.kubernetes.io/subnets: subnet-0660ebda52b33e398,subnet-062bc75ee246c2230
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+  host: shopzone.yourdomain.com   # ← change
+  tlsSecretName: shopzone-tls
+
+postgresql:
+  enabled: false
+  host: "YOUR-RDS-ENDPOINT.ap-south-1.rds.amazonaws.com"   # ← change after RDS created
+  port: "5432"
+  database: ecommerce
+  username: postgres
+  existingSecret: shopzone-db-secret
