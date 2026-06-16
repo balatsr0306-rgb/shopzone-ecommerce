@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.pem
+*.log
+target/
+dist/
+coverage/
+.sonar/
+.trivycache/
