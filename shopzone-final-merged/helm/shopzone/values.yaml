@@ -5,12 +5,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 global:
-  imageRegistry: "ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com"   # ← change ACCOUNT_ID
+  imageRegistry: "187352848533.dkr.ecr.ap-south-1.amazonaws.com"   # ← change ACCOUNT_ID
 
 backend:
   image:
     repository: shopzone-backend
-    tag: latest
+    tag: "build-1"
     pullPolicy: Always
   replicaCount: 2
   port: 5000
@@ -29,7 +29,7 @@ backend:
 frontend:
   image:
     repository: shopzone-frontend
-    tag: latest
+    tag: "build-1"
     pullPolicy: Always
   replicaCount: 2
   port: 80
@@ -48,12 +48,12 @@ ingress:
     alb.ingress.kubernetes.io/subnets: subnet-0660ebda52b33e398,subnet-062bc75ee246c2230
     alb.ingress.kubernetes.io/healthcheck-path: /health
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
-  host: shopzone.yourdomain.com   # ← change
+  host: shopzone.tsrdevopstech.online   # ← change
   tlsSecretName: shopzone-tls
 
 postgresql:
   enabled: false
-  host: "YOUR-RDS-ENDPOINT.ap-south-1.rds.amazonaws.com"   # ← change after RDS created
+  host: "shopzone.cx2gwesm047r.ap-south-1.rds.amazonaws.com"   # ← change after RDS created
   port: "5432"
   database: ecommerce
   username: postgres
