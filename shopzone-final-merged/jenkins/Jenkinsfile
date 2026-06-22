@@ -18,17 +18,16 @@ pipeline {
           serviceAccountName: jenkins
           containers:
 
-          # ── Docker-in-Docker (build & push images) ──────────────────────
-          - name: docker
-            image: docker:24-dind
-            securityContext:
-              privileged: true
-            env:
-              - name: DOCKER_TLS_CERTDIR
-                value: ""
+          # ── Kaniko (build & push images) ────────────────────────────────
+          - name: kaniko
+            image: gcr.io/kaniko-project/executor:v1.23.2
+            command:
+              - sleep
+            args:
+              - infinity
             volumeMounts:
-              - name: docker-sock
-                mountPath: /var/run/docker.sock
+              - name: ecr-secret
+                mountPath: /kaniko/.docker
 
           # ── Node.js (npm test, sonar-scanner) ───────────────────────────
           - name: node
@@ -51,8 +50,6 @@ pipeline {
             image: aquasec/trivy:latest
             command: ["sleep", "infinity"]
             volumeMounts:
-              - name: docker-sock
-                mountPath: /var/run/docker.sock
               - name: trivy-cache
                 mountPath: /root/.cache/trivy
             resources:
@@ -65,11 +62,12 @@ pipeline {
             command: ["sleep", "infinity"]
 
           volumes:
-          - name: docker-sock
-            hostPath:
-              path: /var/run/docker.sock
           - name: trivy-cache
             emptyDir: {}
+
+          - name: ecr-secret
+            secret:
+              secretName: ecr-secret
       '''
     }
   }
@@ -77,14 +75,12 @@ pipeline {
   // ── Global environment ──────────────────────────────────────────────────
   environment {
     AWS_REGION       = 'ap-south-1'
-    ECR_REGISTRY     = credentials('ECR_REGISTRY')   // e.g. 123456.dkr.ecr.ap-south-1.amazonaws.com
-    IMAGE_TAG        = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'latest'}"
+    ECR_REGISTRY     = '187352848533.dkr.ecr.ap-south-1.amazonaws.com'
+    IMAGE_TAG        = "v1.${BUILD_NUMBER}"
     BACKEND_IMAGE    = "${ECR_REGISTRY}/shopzone-backend:${IMAGE_TAG}"
     FRONTEND_IMAGE   = "${ECR_REGISTRY}/shopzone-frontend:${IMAGE_TAG}"
-    ARGOCD_SERVER    = credentials('ARGOCD_SERVER')
-    ARGOCD_TOKEN     = credentials('ARGOCD_TOKEN')
-    SONAR_HOST_URL   = credentials('SONAR_HOST_URL')   // http://sonarqube.sonarqube.svc:9000/sonar
-    SONAR_TOKEN      = credentials('SONAR_TOKEN')      // token from SonarQube UI
+    SONAR_HOST_URL   = 'http://sonarqube.sonarqube.svc.cluster.local:9000/sonar'
+    SONAR_TOKEN      = credentials('sonar-token')
     // TRIVY_SEVERITY: fail pipeline on CRITICAL only — change to CRITICAL,HIGH to be stricter
     TRIVY_SEVERITY   = 'CRITICAL'
   }
@@ -190,45 +186,40 @@ pipeline {
       }
     }
 
-    // ── STAGE 4: ECR Login ────────────────────────────────────────────────
-    stage('🔐 ECR Login') {
+    stage('🚀 Build & Push Images') {
+
+  parallel {
+
+    stage('Backend') {
       steps {
-        container('docker') {
-          withAWS(region: "${AWS_REGION}", credentials: 'AWS_CREDENTIALS') {
-            sh '''
-              aws ecr get-login-password --region $AWS_REGION | \
-                docker login --username AWS --password-stdin $ECR_REGISTRY
-            '''
-          }
+        container('kaniko') {
+          sh """
+          /kaniko/executor \
+            --context=${WORKSPACE}/backend \
+            --dockerfile=${WORKSPACE}/backend/Dockerfile \
+            --destination=${BACKEND_IMAGE} \
+            --destination=${ECR_REGISTRY}/shopzone-backend:latest
+          """
         }
       }
     }
 
-    // ── STAGE 5: Build Docker Images ──────────────────────────────────────
-    stage('🐳 Build Images') {
-      parallel {
-
-        stage('Build Backend') {
-          steps {
-            container('docker') {
-              dir('backend') {
-                sh "docker build -t ${BACKEND_IMAGE} ."
-              }
-            }
-          }
-        }
-
-        stage('Build Frontend') {
-          steps {
-            container('docker') {
-              dir('frontend') {
-                sh "docker build -t ${FRONTEND_IMAGE} ."
-              }
-            }
-          }
+    stage('Frontend') {
+      steps {
+        container('kaniko') {
+          sh """
+          /kaniko/executor \
+            --context=${WORKSPACE}/frontend \
+            --dockerfile=${WORKSPACE}/frontend/Dockerfile \
+            --destination=${FRONTEND_IMAGE} \
+            --destination=${ECR_REGISTRY}/shopzone-frontend:latest
+          """
         }
       }
     }
+
+  }
+}
 
     // ── STAGE 6: Trivy Image Security Scan ───────────────────────────────
     // Scans built Docker images for OS + library vulnerabilities
@@ -355,61 +346,40 @@ pipeline {
       }
     }
 
-    // ── STAGE 7: Push to ECR ──────────────────────────────────────────────
-    // Only runs after ALL Trivy gates pass
-    stage('🚀 Push to ECR') {
-      steps {
-        container('docker') {
-          sh """
-            docker push ${BACKEND_IMAGE}
-            docker push ${FRONTEND_IMAGE}
-          """
-          script {
-            if (env.BRANCH_NAME == 'main') {
-              sh """
-                docker tag ${BACKEND_IMAGE}  ${ECR_REGISTRY}/shopzone-backend:latest
-                docker tag ${FRONTEND_IMAGE} ${ECR_REGISTRY}/shopzone-frontend:latest
-                docker push ${ECR_REGISTRY}/shopzone-backend:latest
-                docker push ${ECR_REGISTRY}/shopzone-frontend:latest
-              """
-            }
-          }
-        }
-      }
-    }
-
     // ── STAGE 8: Update Helm Values → ArgoCD picks it up ─────────────────
-    stage('📝 Update Helm Values') {
-      when { branch 'main' }
-      steps {
-        container('kubectl') {
-          sh """
-            sed -i 's|tag: .*shopzone-backend.*|tag: ${IMAGE_TAG}|g'  helm/shopzone/values.yaml || true
-            sed -i 's|tag: .*shopzone-frontend.*|tag: ${IMAGE_TAG}|g' helm/shopzone/values.yaml || true
+   stage('📝 Update Helm Values') {
+     when { branch 'main' }
 
-            git config user.email "jenkins@shopzone.com"
-            git config user.name  "Jenkins CI"
-            git add helm/shopzone/values.yaml
-            git diff --staged --quiet || git commit -m "ci: update image tag → ${IMAGE_TAG} [skip ci]"
-            git push origin main || true
-          """
-        }
-      }
-    }
+     steps {
+       container('kubectl') {
 
-    // ── STAGE 9: Trigger ArgoCD Sync ─────────────────────────────────────
-    stage('🔄 ArgoCD Sync') {
-      when { branch 'main' }
-      steps {
-        sh """
-          curl -sf -X POST \
-            -H "Authorization: Bearer ${ARGOCD_TOKEN}" \
-            -H "Content-Type: application/json" \
-            https://${ARGOCD_SERVER}/api/v1/applications/shopzone/sync
-          echo "✅ ArgoCD sync triggered"
-        """
-      }
-    }
+         withCredentials([
+           usernamePassword(
+             credentialsId: 'github-token',
+             usernameVariable: 'GITHUB_USER',
+             passwordVariable: 'GITHUB_TOKEN'
+           )
+         ]) {
+
+           sh """
+             sed -i '/backend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' helm/shopzone/values.yaml || true
+
+             sed -i '/frontend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' helm/shopzone/values.yaml || true
+
+             git config user.email "jenkins@shopzone.com"
+             git config user.name "Jenkins CI"
+
+             git add helm/shopzone/values.yaml
+
+             git diff --staged --quiet || \
+             git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
+
+             git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git main
+           """
+         }
+       }
+     }
+   }
 
     // ── STAGE 10: Verify Deployment ───────────────────────────────────────
     stage('✅ Verify Deployment') {
@@ -440,10 +410,6 @@ pipeline {
       //   message: "❌ ShopZone build failed: ${env.BUILD_URL}"
     }
     always {
-      // Cleanup built images from agent node
-      container('docker') {
-        sh "docker rmi ${BACKEND_IMAGE} ${FRONTEND_IMAGE} || true"
-      }
       // Publish HTML security reports in Jenkins UI
       publishHTML(target: [
         allowMissing: true,
