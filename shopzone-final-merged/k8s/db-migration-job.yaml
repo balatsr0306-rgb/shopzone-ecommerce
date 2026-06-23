@@ -11,20 +11,20 @@ metadata:
   name: shopzone-db-migration
   namespace: shopzone
 spec:
-  ttlSecondsAfterFinished: 600
-  backoffLimit: 3
+ # ttlSecondsAfterFinished: 600
+  backoffLimit: 0
   template:
     spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/shopzone-backend:latest   # ← change ACCOUNT_ID
+          image: 187352848533.dkr.ecr.ap-south-1.amazonaws.com/shopzone-backend:v1.1   # ← change ACCOUNT_ID
           command: ["node", "src/config/migrate.js"]
           env:
             - name: NODE_ENV
               value: "production"
             - name: DB_HOST
-              value: "YOUR-RDS-ENDPOINT.ap-south-1.rds.amazonaws.com"   # ← change
+              value: "shopzone.cx2gwesm047r.ap-south-1.rds.amazonaws.com"   # ← change
             - name: DB_PORT
               value: "5432"
             - name: DB_NAME

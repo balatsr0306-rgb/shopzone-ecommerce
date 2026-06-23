@@ -205,6 +205,8 @@ pipeline {
         container('kaniko') {
           sh """
           /kaniko/executor \
+            --snapshot-mode=redo \
+            --use-new-run \
             --context=${WORKSPACE}/shopzone-final-merged/backend \
             --dockerfile=${WORKSPACE}/shopzone-final-merged/backend/Dockerfile \
             --destination=${BACKEND_IMAGE} \
@@ -230,6 +232,8 @@ pipeline {
 
           sh """
           /kaniko/executor \
+            --snapshot-mode=redo \
+            --use-new-run \
             --context=${WORKSPACE}/shopzone-final-merged/frontend \
             --dockerfile=${WORKSPACE}/shopzone-final-merged/frontend/Dockerfile \
             --destination=${FRONTEND_IMAGE} \

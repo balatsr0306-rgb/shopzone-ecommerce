@@ -1,7 +1,7 @@
 FROM node:18
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci  --omit=dev
 COPY . .
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
     chown -R appuser:appgroup /app

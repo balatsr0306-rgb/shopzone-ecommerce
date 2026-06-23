@@ -62,6 +62,8 @@ spec:
               value: sonar
             - name: POSTGRES_PASSWORD
               value: sonarpass
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
           volumeMounts:
@@ -115,6 +117,14 @@ spec:
           command: ["sh", "-c", "ulimit -n 65536"]
           securityContext:
             privileged: true
+        - name: init-chown
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /opt/sonarqube/data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: sonarqube-data
+              mountPath: /opt/sonarqube/data
       containers:
         - name: sonarqube
           image: sonarqube:10-community
@@ -180,7 +190,7 @@ metadata:
     alb.ingress.kubernetes.io/healthcheck-path: /sonar/api/system/status
 spec:
   rules:
-    - host: sonar.yourdomain.com     # ← Change to your domain
+    - host: sonar.tsrdevopstech.online     # ← Change to your domain
       http:
         paths:
           - path: /

@@ -11,7 +11,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/YOUR_ORG/shopzone.git   # ← change
+    repoURL: https://github.com/balatsr0306-rgb/shopzone-ecommerce.git   # ← change
     targetRevision: main
     path: helm/shopzone
     helm:
@@ -19,7 +19,7 @@ spec:
         - values.yaml
       parameters:
         - name: global.imageRegistry
-          value: "ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com"   # ← change ACCOUNT_ID
+          value: "187352848533.dkr.ecr.ap-south-1.amazonaws.com"   # ← change ACCOUNT_ID
 
   destination:
     server: https://kubernetes.default.svc

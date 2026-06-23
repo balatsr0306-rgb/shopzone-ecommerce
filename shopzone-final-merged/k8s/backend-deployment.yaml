@@ -34,7 +34,7 @@ spec:
       containers:
         - name: backend
           # ── Replace ACCOUNT_ID with your AWS account ID ───────────────
-          image: ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/shopzone-backend:latest
+          image: 187352848533.dkr.ecr.ap-south-1.amazonaws.com/shopzone-backend:v1.1
           imagePullPolicy: Always
           ports:
             - name: http
@@ -46,7 +46,7 @@ spec:
               value: "5000"
             # ── RDS endpoint (inside same VPC — private connectivity) ──
             - name: DB_HOST
-              value: "YOUR-RDS-ENDPOINT.ap-south-1.rds.amazonaws.com"   # ← change
+              value: "shopzone.cx2gwesm047r.ap-south-1.rds.amazonaws.com"   # ← change
             - name: DB_PORT
               value: "5432"
             - name: DB_NAME
