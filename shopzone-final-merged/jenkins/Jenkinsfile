@@ -118,7 +118,7 @@ pipeline {
         stage('Backend Tests') {
           steps {
             container('node') {
-              dir('backend') {
+              dir('shopzone-final-merged/backend') {
                 sh '''
                   npm ci
                   npm test -- --passWithNoTests --coverage \
@@ -133,7 +133,7 @@ pipeline {
         stage('Frontend Tests') {
           steps {
             container('node') {
-              dir('frontend') {
+              dir('shopzone-final-merged/frontend') {
                 sh '''
                   npm ci
                   CI=true npm test -- --passWithNoTests --coverage \
@@ -154,7 +154,7 @@ pipeline {
         stage('Backend — SonarQube') {
           steps {
             container('sonar') {
-              dir('backend') {
+              dir('shopzone-final-merged/backend') {
                 sh """
                   sonar-scanner \
                     -Dsonar.projectKey=shopzone-backend \
@@ -175,7 +175,7 @@ pipeline {
         stage('Frontend — SonarQube') {
           steps {
             container('sonar') {
-              dir('frontend') {
+              dir('shopzone-final-merged/frontend') {
                 sh """
                   sonar-scanner \
                     -Dsonar.projectKey=shopzone-frontend \
@@ -204,8 +204,8 @@ pipeline {
         container('kaniko') {
           sh """
           /kaniko/executor \
-            --context=${WORKSPACE}/backend \
-            --dockerfile=${WORKSPACE}/backend/Dockerfile \
+            --context=${WORKSPACE}/shopzone-final-merged/backend \
+            --dockerfile=${WORKSPACE}/shopzone-final-merged/backend/Dockerfile \
             --destination=${BACKEND_IMAGE} \
             --destination=${ECR_REGISTRY}/shopzone-backend:latest
           """
@@ -218,8 +218,8 @@ pipeline {
         container('kaniko') {
           sh """
           /kaniko/executor \
-            --context=${WORKSPACE}/frontend \
-            --dockerfile=${WORKSPACE}/frontend/Dockerfile \
+            --context=${WORKSPACE}/shopzone-final-merged/frontend \
+            --dockerfile=${WORKSPACE}/shopzone-final-merged/frontend/Dockerfile \
             --destination=${FRONTEND_IMAGE} \
             --destination=${ECR_REGISTRY}/shopzone-frontend:latest
           """
@@ -327,20 +327,20 @@ pipeline {
                   --severity CRITICAL,HIGH \
                   --format json \
                   --output trivy-fs-backend.json \
-                  ./backend || true
+                  ./shopzone-final-merged/backend || true
 
                 # Scan frontend node_modules / package-lock
                 trivy fs \
                   --severity CRITICAL,HIGH \
                   --format json \
                   --output trivy-fs-frontend.json \
-                  ./frontend || true
+                  ./shopzone-final-merged/frontend || true
 
                 # Print summary to console
                 echo "--- Backend Dependencies ---"
-                trivy fs --severity CRITICAL,HIGH ./backend || true
+                trivy fs --severity CRITICAL,HIGH ./shopzone-final-merged/backend || true
                 echo "--- Frontend Dependencies ---"
-                trivy fs --severity CRITICAL,HIGH ./frontend || true
+                trivy fs --severity CRITICAL,HIGH ./shopzone-final-merged/frontend || true
 
                 echo "✅ Filesystem scan complete"
               """
@@ -371,14 +371,14 @@ pipeline {
          ]) {
 
            sh """
-             sed -i '/backend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' helm/shopzone/values.yaml || true
+             sed -i '/backend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' shopzone-final-merged/helm/shopzone/values.yaml || true
 
-             sed -i '/frontend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' helm/shopzone/values.yaml || true
+             sed -i '/frontend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' shopzone-final-merged/helm/shopzone/values.yaml || true
 
              git config user.email "jenkins@shopzone.com"
              git config user.name "Jenkins CI"
 
-             git add helm/shopzone/values.yaml
+             git add shopzone-final-merged/helm/shopzone/values.yaml
 
              git diff --staged --quiet || \
              git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
