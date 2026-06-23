@@ -217,6 +217,17 @@ pipeline {
     stage('Frontend') {
       steps {
         container('kaniko') {
+          sh '''
+          echo "===== WORKSPACE ====="
+          pwd
+
+          echo "===== FRONTEND FILES ====="
+          ls -la ${WORKSPACE}/shopzone-final-merged/frontend
+
+          echo "===== PACKAGE.JSON ====="
+          cat ${WORKSPACE}/shopzone-final-merged/frontend/package.json || true
+          '''
+
           sh """
           /kaniko/executor \
             --context=${WORKSPACE}/shopzone-final-merged/frontend \
