@@ -78,7 +78,7 @@ pipeline {
     IMAGE_TAG        = "v1.${BUILD_NUMBER}"
     BACKEND_IMAGE    = "${ECR_REGISTRY}/shopzone-backend:${IMAGE_TAG}"
     FRONTEND_IMAGE   = "${ECR_REGISTRY}/shopzone-frontend:${IMAGE_TAG}"
-    SONAR_HOST_URL   = 'http://sonarqube.sonarqube.svc.cluster.local:9000'
+    SONAR_HOST_URL   = 'http://sonarqube.sonarqube.svc.cluster.local:9000/sonar'
     SONAR_TOKEN      = credentials('sonar-token')
     // TRIVY_SEVERITY: fail pipeline on CRITICAL only — change to CRITICAL,HIGH to be stricter
     TRIVY_SEVERITY   = 'CRITICAL'
