@@ -85,11 +85,20 @@ spec:
               value: "-Djenkins.install.runSetupWizard=false -Xmx1500m"
             - name: JENKINS_OPTS
               value: "--prefix=/jenkins"
+            - name: CASC_JENKINS_CONFIG
+              value: "/var/jenkins_home/casc_configs/jenkins.yaml"
+            - name: JENKINS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-admin-secret
+                  key: password
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
             - name: docker-sock
               mountPath: /var/run/docker.sock
+            - name: casc-config
+              mountPath: /var/jenkins_home/casc_configs
           resources:
             requests: { cpu: "500m",  memory: "1Gi"  }
             limits:   { cpu: "1500m", memory: "2Gi"  }
@@ -113,6 +122,9 @@ spec:
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock
+        - name: casc-config
+          configMap:
+            name: jenkins-casc-config
 
 ---
 apiVersion: v1
@@ -144,7 +156,7 @@ metadata:
     alb.ingress.kubernetes.io/healthcheck-path: /jenkins/login
 spec:
   rules:
-    - host: jenkins.yourdomain.com     # ← Change to your domain
+    - host: jenkins.tsrdevopstech.online     # ← Change to your domain
       http:
         paths:
           - path: /
