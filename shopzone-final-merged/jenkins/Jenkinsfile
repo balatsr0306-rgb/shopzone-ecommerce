@@ -120,7 +120,7 @@ pipeline {
             container('node') {
               dir('shopzone-final-merged/backend') {
                 sh '''
-                  npm ci
+                  npm install
                   npm test -- --passWithNoTests --coverage \
                     --coverageReporters=lcov --coverageDirectory=coverage \
                     2>&1 | tee test-results.txt || true
@@ -135,7 +135,7 @@ pipeline {
             container('node') {
               dir('shopzone-final-merged/frontend') {
                 sh '''
-                  npm ci
+                  npm install
                   CI=true npm test -- --passWithNoTests --coverage \
                     --coverageReporters=lcov --coverageDirectory=coverage \
                     2>&1 | tee test-results.txt || true
