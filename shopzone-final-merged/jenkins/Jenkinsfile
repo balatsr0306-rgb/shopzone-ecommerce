@@ -100,7 +100,17 @@ pipeline {
         echo "Branch: ${env.BRANCH_NAME} | Commit: ${env.GIT_COMMIT?.take(7)}"
       }
     }
-
+    stage('Debug Workspace') {
+    steps {
+        container('node') {
+            sh '''
+                pwd
+                ls -la
+                find . -name package-lock.json
+            '''
+        }
+    }
+}
     // ── STAGE 2: Lint & Unit Tests ────────────────────────────────────────
     stage('🧪 Lint & Test') {
       parallel {
