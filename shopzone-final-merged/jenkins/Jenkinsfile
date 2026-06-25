@@ -290,6 +290,8 @@ pipeline {
 
                     find . -name values.yaml
 
+                    git config --global --add safe.directory /home/jenkins/agent/workspace/shopzone-cicd
+
                     git status
                     git rev-parse --show-toplevel
 
