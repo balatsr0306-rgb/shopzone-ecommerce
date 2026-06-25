@@ -206,6 +206,7 @@ pipeline {
           sh """
           /kaniko/executor \
             --snapshot-mode=redo \
+            --cache=false \
             --context=${WORKSPACE}/shopzone-final-merged/backend \
             --dockerfile=${WORKSPACE}/shopzone-final-merged/backend/Dockerfile \
             --destination=${BACKEND_IMAGE} \
