@@ -299,6 +299,9 @@ pipeline {
 
                     git checkout main || git checkout -b main origin/main
 
+                    git branch -a
+                    git status
+
                     git pull origin main
 
                     sed -i "s/tag:.*/tag: \\"${IMAGE_TAG}\\"/g" shopzone-final-merged/helm/shopzone/values.yaml
@@ -311,7 +314,7 @@ pipeline {
                     git diff --staged --quiet || \
                     git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
 
-                    git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git main
+                    git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git HEAD:main
                     """
                 }
             }
