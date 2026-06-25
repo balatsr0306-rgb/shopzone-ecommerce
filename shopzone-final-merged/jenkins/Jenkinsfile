@@ -222,6 +222,7 @@ pipeline {
           }
           post {
             always {
+      // publishHTML disabled
               archiveArtifacts artifacts: 'trivy-backend-report.*', allowEmptyArchive: true
             }
           }
@@ -255,6 +256,7 @@ pipeline {
           }
           post {
             always {
+      // publishHTML disabled
               archiveArtifacts artifacts: 'trivy-frontend-report.*', allowEmptyArchive: true
             }
           }
@@ -281,6 +283,7 @@ pipeline {
           }
           post {
             always {
+      // publishHTML disabled
               archiveArtifacts artifacts: 'trivy-fs-*.json', allowEmptyArchive: true
             }
           }
@@ -335,14 +338,8 @@ pipeline {
       echo "Pipeline FAILED"
     }
     always {
-      publishHTML(target: [
-        allowMissing: true,
-        alwaysLinkToLastBuild: true,
-        keepAll: true,
-        reportDir: '.',
-        reportFiles: 'trivy-backend-report.html,trivy-frontend-report.html',
-        reportName: 'Trivy Security Report'
-      ])
+      // publishHTML disabled
+      echo "Pipeline finished - reports archived as artifacts"
     }
   }
 }
