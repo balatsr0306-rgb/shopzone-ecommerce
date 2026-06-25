@@ -196,52 +196,38 @@ pipeline {
       }
     }
 
-    stage('🚀 Build & Push Images') {
-
-  parallel {
-
-    stage('Backend') {
-      steps {
-        container('kaniko') {
-          sh """
-          /kaniko/executor \
-            --snapshot-mode=redo \
-            --cache=false \
-            --context=${WORKSPACE}/shopzone-final-merged/backend \
-            --dockerfile=${WORKSPACE}/shopzone-final-merged/backend/Dockerfile \
-            --destination=${BACKEND_IMAGE} \
-            --destination=${ECR_REGISTRY}/shopzone-backend:latest
-          """
+        stage('🚀 Build Backend Image') {
+          steps {
+            container('kaniko') {
+              sh """
+              /kaniko/executor \
+                --snapshot-mode=redo \
+                --cache=false \
+                --context=${WORKSPACE}/shopzone-final-merged/backend \
+                --dockerfile=${WORKSPACE}/shopzone-final-merged/backend/Dockerfile \
+                --destination=${BACKEND_IMAGE} \
+                --destination=${ECR_REGISTRY}/shopzone-backend:latest
+              """
+           }
         }
-      }
-    }
+     }
 
-    stage('Frontend') {
-      steps {
-        container('kaniko') {
-          sh '''
-          echo "===== WORKSPACE ====="
-          pwd
-
-          echo "===== FRONTEND FILES ====="
-          ls -la ${WORKSPACE}/shopzone-final-merged/frontend
-
-          echo "===== PACKAGE.JSON ====="
-          cat ${WORKSPACE}/shopzone-final-merged/frontend/package.json || true
-          '''
-
-          sh """
-          /kaniko/executor \
-            --snapshot-mode=redo \
-            --context=${WORKSPACE}/shopzone-final-merged/frontend \
-            --dockerfile=${WORKSPACE}/shopzone-final-merged/frontend/Dockerfile \
-            --destination=${FRONTEND_IMAGE} \
-            --destination=${ECR_REGISTRY}/shopzone-frontend:latest
-          """
+        stage('🚀 Build Frontend Image') {
+          steps {
+            container('kaniko') {
+              sh """
+              /kaniko/executor \
+                --snapshot-mode=redo \
+                --cache=false \
+                --ignore-path=/root/.npm \
+                --context=${WORKSPACE}/shopzone-final-merged/frontend \
+                --dockerfile=${WORKSPACE}/shopzone-final-merged/frontend/Dockerfile \
+                --destination=${FRONTEND_IMAGE} \
+                --destination=${ECR_REGISTRY}/shopzone-frontend:latest
+              """
+           }
         }
-      }
-    }
-
+     }
   }
 }
 
