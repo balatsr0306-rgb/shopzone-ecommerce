@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci
+RUN npm ci && npm cache clean --force
 
 RUN echo "===== CHECK REACT SCRIPTS =====" && \
     ls -la node_modules/react-scripts && \
