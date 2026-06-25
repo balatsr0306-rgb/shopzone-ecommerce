@@ -233,14 +233,6 @@ pipeline {
               sh """
                 trivy image \
                   --severity CRITICAL,HIGH,MEDIUM \
-                  --format template \
-                  --template "@contrib/html.tpl" \
-                  --output trivy-frontend-report.html \
-                  --timeout 10m \
-                  ${FRONTEND_IMAGE} || true
-
-                trivy image \
-                  --severity CRITICAL,HIGH,MEDIUM \
                   --format json \
                   --output trivy-frontend-report.json \
                   --timeout 10m \
