@@ -1,10 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// ShopZone CI/CD Pipeline
-// Stages: Checkout → Test → SonarQube → Build Images → Trivy Scan →
-//         Push ECR → Update Helm → ArgoCD Sync → Verify
-// Jenkins runs as a pod INSIDE EKS — no server installation needed
-// ─────────────────────────────────────────────────────────────────────────────
-
 pipeline {
   agent {
     kubernetes {
@@ -17,8 +10,6 @@ pipeline {
         spec:
           serviceAccountName: jenkins
           containers:
-
-          # ── Kaniko (build & push images) ────────────────────────────────
           - name: kaniko
             image: gcr.io/kaniko-project/executor:v1.23.2-debug
             command:
@@ -27,16 +18,12 @@ pipeline {
             volumeMounts:
               - name: ecr-secret
                 mountPath: /kaniko/.docker
-
-          # ── Node.js (npm test, sonar-scanner) ───────────────────────────
           - name: node
             image: node:18-alpine
             command: ["sleep", "infinity"]
             resources:
               requests: { cpu: "300m", memory: "512Mi" }
               limits:   { cpu: "1000m", memory: "1Gi" }
-
-          # ── SonarQube Scanner ────────────────────────────────────────────
           - name: sonar
             image: sonarsource/sonar-scanner-cli:latest
             command: ["sleep", "infinity"]
@@ -46,8 +33,6 @@ pipeline {
             resources:
               requests: { cpu: "500m", memory: "1Gi" }
               limits:   { cpu: "1000m", memory: "2Gi" }
-
-          # ── Trivy (security scanning) ────────────────────────────────────
           - name: trivy
             image: aquasec/trivy:latest
             command: ["sleep", "infinity"]
@@ -57,16 +42,12 @@ pipeline {
             resources:
               requests: { cpu: "200m", memory: "512Mi" }
               limits:   { cpu: "500m", memory: "1Gi" }
-
-          # ── kubectl / helm (deploy) ──────────────────────────────────────
           - name: kubectl
             image: alpine/k8s:1.28.3
             command: ["sleep", "infinity"]
-
           volumes:
           - name: trivy-cache
             emptyDir: {}
-
           - name: ecr-secret
             secret:
               secretName: ecr-secret
@@ -74,17 +55,15 @@ pipeline {
     }
   }
 
-  // ── Global environment ──────────────────────────────────────────────────
   environment {
-    AWS_REGION       = 'ap-south-1'
-    ECR_REGISTRY     = '187352848533.dkr.ecr.ap-south-1.amazonaws.com'
-    IMAGE_TAG        = "v1.${BUILD_NUMBER}"
-    BACKEND_IMAGE    = "${ECR_REGISTRY}/shopzone-backend:${IMAGE_TAG}"
-    FRONTEND_IMAGE   = "${ECR_REGISTRY}/shopzone-frontend:${IMAGE_TAG}"
-    SONAR_HOST_URL   = 'http://sonarqube.sonarqube.svc.cluster.local:9000/sonar'
-    SONAR_TOKEN      = credentials('sonar-token')
-    // TRIVY_SEVERITY: fail pipeline on CRITICAL only — change to CRITICAL,HIGH to be stricter
-    TRIVY_SEVERITY   = 'CRITICAL'
+    AWS_REGION     = 'ap-south-1'
+    ECR_REGISTRY   = '187352848533.dkr.ecr.ap-south-1.amazonaws.com'
+    IMAGE_TAG      = "v1.${BUILD_NUMBER}"
+    BACKEND_IMAGE  = "${ECR_REGISTRY}/shopzone-backend:${IMAGE_TAG}"
+    FRONTEND_IMAGE = "${ECR_REGISTRY}/shopzone-frontend:${IMAGE_TAG}"
+    SONAR_HOST_URL = 'http://sonarqube.sonarqube.svc.cluster.local:9000/sonar'
+    SONAR_TOKEN    = credentials('sonar-token')
+    TRIVY_SEVERITY = 'CRITICAL'
   }
 
   options {
@@ -96,28 +75,15 @@ pipeline {
 
   stages {
 
-    // ── STAGE 1: Checkout ─────────────────────────────────────────────────
-    stage('📦 Checkout') {
+    stage('Checkout') {
       steps {
         checkout scm
-        echo "Branch: ${env.BRANCH_NAME} | Commit: ${env.GIT_COMMIT?.take(7)}"
+        echo "Commit: ${env.GIT_COMMIT?.take(7)}"
       }
     }
-    stage('Debug Workspace') {
-    steps {
-        container('node') {
-            sh '''
-                pwd
-                ls -la
-                find . -name package-lock.json
-            '''
-        }
-    }
-}
-    // ── STAGE 2: Lint & Unit Tests ────────────────────────────────────────
-    stage('🧪 Lint & Test') {
-      parallel {
 
+    stage('Lint and Test') {
+      parallel {
         stage('Backend Tests') {
           steps {
             container('node') {
@@ -132,14 +98,13 @@ pipeline {
             }
           }
         }
-
         stage('Frontend Tests') {
           steps {
             container('node') {
               dir('shopzone-final-merged/frontend') {
                 sh '''
                   npm install
-                  echo "Skipping frontend tests - no test script found"
+                  echo "Skipping frontend tests"
                 '''
               }
             }
@@ -148,11 +113,9 @@ pipeline {
       }
     }
 
-    // ── STAGE 3: SonarQube Code Quality Analysis ──────────────────────────
-    stage('🔎 SonarQube Analysis') {
+    stage('SonarQube Analysis') {
       parallel {
-
-        stage('Backend — SonarQube') {
+        stage('Backend SonarQube') {
           steps {
             container('sonar') {
               dir('shopzone-final-merged/backend') {
@@ -172,8 +135,7 @@ pipeline {
             }
           }
         }
-
-        stage('Frontend — SonarQube') {
+        stage('Frontend SonarQube') {
           steps {
             container('sonar') {
               dir('shopzone-final-merged/frontend') {
@@ -196,54 +158,45 @@ pipeline {
       }
     }
 
-        stage('🚀 Build Backend Image') {
-          steps {
-            container('kaniko') {
-              sh """
-              /kaniko/executor \
-                --snapshot-mode=redo \
-                --cache=false \
-                --context=${WORKSPACE}/shopzone-final-merged/backend \
-                --dockerfile=${WORKSPACE}/shopzone-final-merged/backend/Dockerfile \
-                --destination=${BACKEND_IMAGE} \
-                --destination=${ECR_REGISTRY}/shopzone-backend:latest
-              """
-           }
+    stage('Build Backend Image') {
+      steps {
+        container('kaniko') {
+          sh """
+            /kaniko/executor \
+              --snapshot-mode=redo \
+              --cache=false \
+              --context=${WORKSPACE}/shopzone-final-merged/backend \
+              --dockerfile=${WORKSPACE}/shopzone-final-merged/backend/Dockerfile \
+              --destination=${BACKEND_IMAGE} \
+              --destination=${ECR_REGISTRY}/shopzone-backend:latest
+          """
         }
-     }
+      }
+    }
 
-        stage('🚀 Build Frontend Image') {
-          steps {
-            container('kaniko') {
-              sh """
-              /kaniko/executor \
-                --snapshot-mode=redo \
-                --cache=false \
-                --ignore-path=/root/.npm \
-                --context=${WORKSPACE}/shopzone-final-merged/frontend \
-                --dockerfile=${WORKSPACE}/shopzone-final-merged/frontend/Dockerfile \
-                --destination=${FRONTEND_IMAGE} \
-                --destination=${ECR_REGISTRY}/shopzone-frontend:latest
-              """
-           }
+    stage('Build Frontend Image') {
+      steps {
+        container('kaniko') {
+          sh """
+            /kaniko/executor \
+              --snapshot-mode=redo \
+              --cache=false \
+              --ignore-path=/root/.npm \
+              --context=${WORKSPACE}/shopzone-final-merged/frontend \
+              --dockerfile=${WORKSPACE}/shopzone-final-merged/frontend/Dockerfile \
+              --destination=${FRONTEND_IMAGE} \
+              --destination=${ECR_REGISTRY}/shopzone-frontend:latest
+          """
         }
-     }
-  }
-}
+      }
+    }
 
-    // ── STAGE 6: Trivy Image Security Scan ───────────────────────────────
-    // Scans built Docker images for OS + library vulnerabilities
-    // Pipeline fails ONLY on CRITICAL CVEs (configurable via TRIVY_SEVERITY)
-    stage('🛡️ Trivy Security Scan') {
+    stage('Trivy Security Scan') {
       parallel {
-
-        stage('Trivy — Backend Image') {
+        stage('Trivy Backend') {
           steps {
             container('trivy') {
               sh """
-                echo "━━━ Trivy Scan: Backend Image ━━━"
-
-                # Generate HTML report (always — even if vulns found)
                 trivy image \
                   --severity CRITICAL,HIGH,MEDIUM \
                   --format template \
@@ -252,7 +205,6 @@ pipeline {
                   --timeout 10m \
                   ${BACKEND_IMAGE} || true
 
-                # Generate JSON report for archiving
                 trivy image \
                   --severity CRITICAL,HIGH,MEDIUM \
                   --format json \
@@ -260,14 +212,11 @@ pipeline {
                   --timeout 10m \
                   ${BACKEND_IMAGE} || true
 
-                # GATE: fail pipeline if CRITICAL vulns found in image
                 trivy image \
                   --severity ${TRIVY_SEVERITY} \
                   --exit-code 1 \
                   --timeout 10m \
                   ${BACKEND_IMAGE}
-
-                echo "✅ Backend image scan passed"
               """
             }
           }
@@ -277,13 +226,10 @@ pipeline {
             }
           }
         }
-
-        stage('Trivy — Frontend Image') {
+        stage('Trivy Frontend') {
           steps {
             container('trivy') {
               sh """
-                echo "━━━ Trivy Scan: Frontend Image ━━━"
-
                 trivy image \
                   --severity CRITICAL,HIGH,MEDIUM \
                   --format template \
@@ -299,14 +245,11 @@ pipeline {
                   --timeout 10m \
                   ${FRONTEND_IMAGE} || true
 
-                # GATE: fail pipeline if CRITICAL vulns found
                 trivy image \
                   --severity ${TRIVY_SEVERITY} \
                   --exit-code 1 \
                   --timeout 10m \
                   ${FRONTEND_IMAGE}
-
-                echo "✅ Frontend image scan passed"
               """
             }
           }
@@ -316,34 +259,23 @@ pipeline {
             }
           }
         }
-
-        stage('Trivy — Filesystem Scan') {
+        stage('Trivy Filesystem') {
           steps {
             container('trivy') {
               sh """
-                echo "━━━ Trivy Scan: Source + Dependencies ━━━"
-
-                # Scan backend node_modules / package-lock
                 trivy fs \
                   --severity CRITICAL,HIGH \
                   --format json \
                   --output trivy-fs-backend.json \
                   ./shopzone-final-merged/backend || true
 
-                # Scan frontend node_modules / package-lock
                 trivy fs \
                   --severity CRITICAL,HIGH \
                   --format json \
                   --output trivy-fs-frontend.json \
                   ./shopzone-final-merged/frontend || true
 
-                # Print summary to console
-                echo "--- Backend Dependencies ---"
-                trivy fs --severity CRITICAL,HIGH ./shopzone-final-merged/backend || true
-                echo "--- Frontend Dependencies ---"
-                trivy fs --severity CRITICAL,HIGH ./shopzone-final-merged/frontend || true
-
-                echo "✅ Filesystem scan complete"
+                echo "Filesystem scan complete"
               """
             }
           }
@@ -356,71 +288,53 @@ pipeline {
       }
     }
 
-    // ── STAGE 8: Update Helm Values → ArgoCD picks it up ─────────────────
-   stage('📝 Update Helm Values') {
-     when { branch 'main' }
+    stage('Update Helm Values') {
+      when { branch 'main' }
+      steps {
+        container('kubectl') {
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'github-token',
+              usernameVariable: 'GITHUB_USER',
+              passwordVariable: 'GITHUB_TOKEN'
+            )
+          ]) {
+            sh """
+              sed -i 's/tag:.*/tag: "${IMAGE_TAG}"/' shopzone-final-merged/helm/shopzone/values.yaml || true
+              git config user.email "jenkins@shopzone.com"
+              git config user.name "Jenkins CI"
+              git add shopzone-final-merged/helm/shopzone/values.yaml
+              git diff --staged --quiet || git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
+              git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git main
+            """
+          }
+        }
+      }
+    }
 
-     steps {
-       container('kubectl') {
-
-         withCredentials([
-           usernamePassword(
-             credentialsId: 'github-token',
-             usernameVariable: 'GITHUB_USER',
-             passwordVariable: 'GITHUB_TOKEN'
-           )
-         ]) {
-
-           sh """
-             sed -i '/backend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' shopzone-final-merged/helm/shopzone/values.yaml || true
-
-             sed -i '/frontend:/,/pullPolicy:/s/tag:.*/tag: "${IMAGE_TAG}"/' shopzone-final-merged/helm/shopzone/values.yaml || true
-
-             git config user.email "jenkins@shopzone.com"
-             git config user.name "Jenkins CI"
-
-             git add shopzone-final-merged/helm/shopzone/values.yaml
-
-             git diff --staged --quiet || \
-             git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
-
-             git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git main
-           """
-         }
-       }
-     }
-   }
-
-    // ── STAGE 10: Verify Deployment ───────────────────────────────────────
-    stage('✅ Verify Deployment') {
+    stage('Verify Deployment') {
       when { branch 'main' }
       steps {
         container('kubectl') {
           sh '''
-            kubectl rollout status deployment/shopzone-backend  -n shopzone --timeout=180s
+            kubectl rollout status deployment/shopzone-backend -n shopzone --timeout=180s
             kubectl rollout status deployment/shopzone-frontend -n shopzone --timeout=180s
-            echo "✅ All pods healthy — deployment complete!"
+            echo "All pods healthy!"
           '''
         }
       }
     }
+
   }
 
-  // ── Post actions ─────────────────────────────────────────────────────────
   post {
     success {
-      echo "✅ Pipeline SUCCESS — Image Tag: ${IMAGE_TAG}"
-      // Optional Slack notification:
-      // slackSend channel: '#deployments', color: 'good',
-      //   message: "✅ ShopZone deployed: ${IMAGE_TAG} | ${env.BUILD_URL}"
+      echo "Pipeline SUCCESS - Image Tag: ${IMAGE_TAG}"
     }
     failure {
-      echo "❌ Pipeline FAILED — check Trivy / SonarQube reports above"
-      // slackSend channel: '#deployments', color: 'danger',
-      //   message: "❌ ShopZone build failed: ${env.BUILD_URL}"
+      echo "Pipeline FAILED"
     }
     always {
-      // Publish HTML security reports in Jenkins UI
       publishHTML(target: [
         allowMissing: true,
         alwaysLinkToLastBuild: true,
