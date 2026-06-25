@@ -191,98 +191,89 @@ pipeline {
       }
     }
 
-    stage('Trivy Security Scan') {
-      parallel {
-        stage('Trivy Backend') {
-          steps {
-            container('trivy') {
-              sh """
-                trivy image \
-                  --severity CRITICAL,HIGH,MEDIUM \
-                  --format template \
-                  --template "@contrib/html.tpl" \
-                  --output trivy-backend-report.html \
-                  --timeout 10m \
-                  ${BACKEND_IMAGE} || true
+    stage('Trivy Backend') {
+    steps {
+        container('trivy') {
+            sh """
+              mkdir -p /tmp/trivy-backend
+              export TRIVY_CACHE_DIR=/tmp/trivy-backend
 
-                trivy image \
-                  --severity CRITICAL,HIGH,MEDIUM \
-                  --format json \
-                  --output trivy-backend-report.json \
-                  --timeout 10m \
-                  ${BACKEND_IMAGE} || true
+              trivy image \
+                --severity CRITICAL,HIGH,MEDIUM \
+                --format json \
+                --output trivy-backend-report.json \
+                --timeout 10m \
+                ${BACKEND_IMAGE} || true
 
-                trivy image \
-                  --severity ${TRIVY_SEVERITY} \
-                  --exit-code 0 \
-                  --timeout 10m \
-                  ${BACKEND_IMAGE}
-              """
-            }
-          }
-          post {
-            always {
-      // publishHTML disabled
-              archiveArtifacts artifacts: 'trivy-backend-report.*', allowEmptyArchive: true
-            }
-          }
+              trivy image \
+                --severity ${TRIVY_SEVERITY} \
+                --exit-code 0 \
+                --timeout 10m \
+                ${BACKEND_IMAGE}
+            """
         }
-        stage('Trivy Frontend') {
-          steps {
-            container('trivy') {
-              sh """
-                trivy image \
-                  --severity CRITICAL,HIGH,MEDIUM \
-                  --format json \
-                  --output trivy-frontend-report.json \
-                  --timeout 10m \
-                  ${FRONTEND_IMAGE} || true
-
-                trivy image \
-                  --severity ${TRIVY_SEVERITY} \
-                  --exit-code 0 \
-                  --timeout 10m \
-                  ${FRONTEND_IMAGE}
-              """
-            }
-          }
-          post {
-            always {
-      // publishHTML disabled
-              archiveArtifacts artifacts: 'trivy-frontend-report.*', allowEmptyArchive: true
-            }
-          }
-        }
-        stage('Trivy Filesystem') {
-          steps {
-            container('trivy') {
-              sh """
-                trivy fs \
-                  --severity CRITICAL,HIGH \
-                  --format json \
-                  --output trivy-fs-backend.json \
-                  ./shopzone-final-merged/backend || true
-
-                trivy fs \
-                  --severity CRITICAL,HIGH \
-                  --format json \
-                  --output trivy-fs-frontend.json \
-                  ./shopzone-final-merged/frontend || true
-
-                echo "Filesystem scan complete"
-              """
-            }
-          }
-          post {
-            always {
-      // publishHTML disabled
-              archiveArtifacts artifacts: 'trivy-fs-*.json', allowEmptyArchive: true
-            }
-          }
-        }
-      }
     }
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-backend-report.json', allowEmptyArchive: true
+        }
+    }
+}
+    stage('Trivy Frontend') {
+    steps {
+        container('trivy') {
+            sh """
+              mkdir -p /tmp/trivy-frontend
+              export TRIVY_CACHE_DIR=/tmp/trivy-frontend
 
+              trivy image \
+                --severity CRITICAL,HIGH,MEDIUM \
+                --format json \
+                --output trivy-frontend-report.json \
+                --timeout 10m \
+                ${FRONTEND_IMAGE} || true
+
+              trivy image \
+                --severity ${TRIVY_SEVERITY} \
+                --exit-code 0 \
+                --timeout 10m \
+                ${FRONTEND_IMAGE}
+            """
+        }
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-frontend-report.json', allowEmptyArchive: true
+        }
+    }
+}
+    stage('Trivy Filesystem') {
+    steps {
+        container('trivy') {
+            sh """
+              mkdir -p /tmp/trivy-fs
+              export TRIVY_CACHE_DIR=/tmp/trivy-fs
+
+              trivy fs \
+                --severity CRITICAL,HIGH \
+                --format json \
+                --output trivy-fs-backend.json \
+                ./shopzone-final-merged/backend || true
+
+              trivy fs \
+                --severity CRITICAL,HIGH \
+                --format json \
+                --output trivy-fs-frontend.json \
+                ./shopzone-final-merged/frontend || true
+            """
+        }
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-fs-*.json', allowEmptyArchive: true
+        }
+    }
+}
     stage('Update Helm Values') {
       when { branch 'main' }
       steps {
