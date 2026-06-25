@@ -275,27 +275,37 @@ pipeline {
     }
 }
     stage('Update Helm Values') {
-      steps {
-        container('kubectl') {
-          withCredentials([
-            usernamePassword(
-              credentialsId: 'github-token',
-              usernameVariable: 'GITHUB_USER',
-              passwordVariable: 'GITHUB_TOKEN'
-            )
-          ]) {
-            sh """
-              sed -i "s/tag:.*/tag: \"${IMAGE_TAG}\"/g" shopzone-final-merged/helm/shopzone/values.yaml
-              git config user.email "jenkins@shopzone.com"
-              git config user.name "Jenkins CI"
-              git add shopzone-final-merged/helm/shopzone/values.yaml
-              git diff --staged --quiet || git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
-              git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git main
-            """
+        steps {
+            container('kubectl') {
+                dir('shopzone-final-merged') {
+                   withCredentials([
+                       usernamePassword(
+                           credentialsId: 'github-token',
+                           usernameVariable: 'GITHUB_USER',
+                           passwordVariable: 'GITHUB_TOKEN'
+                       )
+                   ]) {
+                       sh """
+                       pwd
+                       ls -la
+
+                       sed -i "s/tag:.*/tag: \\"${IMAGE_TAG}\\"/g" helm/shopzone/values.yaml
+
+                       git config user.email "jenkins@shopzone.com"
+                       git config user.name "Jenkins CI"
+
+                       git add helm/shopzone/values.yaml
+
+                       git diff --staged --quiet || \
+                       git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
+
+                       git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git main
+                       """
+                  }
+              }
           }
-        }
       }
-    }
+  }
 
     stage('Verify Deployment') {
       steps {
