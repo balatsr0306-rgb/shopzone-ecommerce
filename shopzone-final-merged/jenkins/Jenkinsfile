@@ -288,6 +288,13 @@ pipeline {
                        sh """
                        pwd
                        ls -la
+                       ls -la .git || true
+
+                       cd ..
+                       echo "After cd .."
+                       pwd
+                       ls -la
+                       ls -la .git || true
 
                        sed -i "s/tag:.*/tag: \\"${IMAGE_TAG}\\"/g" helm/shopzone/values.yaml
 
