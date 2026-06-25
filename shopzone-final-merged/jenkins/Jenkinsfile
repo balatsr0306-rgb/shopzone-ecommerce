@@ -275,7 +275,6 @@ pipeline {
     }
 }
     stage('Update Helm Values') {
-      when { branch 'main' }
       steps {
         container('kubectl') {
           withCredentials([
@@ -299,7 +298,6 @@ pipeline {
     }
 
     stage('Verify Deployment') {
-      when { branch 'main' }
       steps {
         container('kubectl') {
           sh '''
