@@ -295,6 +295,12 @@ pipeline {
                     git status
                     git rev-parse --show-toplevel
 
+                    git fetch origin
+
+                    git checkout main || git checkout -b main origin/main
+
+                    git pull origin main
+
                     sed -i "s/tag:.*/tag: \\"${IMAGE_TAG}\\"/g" shopzone-final-merged/helm/shopzone/values.yaml
 
                     git config user.email "jenkins@shopzone.com"
