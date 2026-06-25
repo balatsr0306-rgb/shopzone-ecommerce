@@ -10,7 +10,7 @@ global:
 backend:
   image:
     repository: shopzone-backend
-    tag: "v1.41"
+    tag: "v1.42"
     pullPolicy: Always
   replicaCount: 2
   port: 5000
@@ -29,7 +29,7 @@ backend:
 frontend:
   image:
     repository: shopzone-frontend
-    tag: "v1.41"
+    tag: "v1.42"
     pullPolicy: Always
   replicaCount: 2
   port: 80
