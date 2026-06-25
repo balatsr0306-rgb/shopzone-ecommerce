@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY . .
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser && \
     chown -R appuser:appgroup /app
 USER appuser
 EXPOSE 5000
