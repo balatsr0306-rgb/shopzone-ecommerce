@@ -345,14 +345,14 @@ pipeline {
               argocd app sync $ARGOCD_APP \
                 --server $ARGOCD_SERVER \
                 --auth-token $ARGOCD_AUTH_TOKEN \
-                --insecure \
+                --plaintext \
                 --timeout 120
 
               echo ">>> Waiting for ArgoCD app to become Healthy..."
               argocd app wait $ARGOCD_APP \
                 --server $ARGOCD_SERVER \
                 --auth-token $ARGOCD_AUTH_TOKEN \
-                --insecure \
+                --plaintext \
                 --health \
                 --timeout 180
 
