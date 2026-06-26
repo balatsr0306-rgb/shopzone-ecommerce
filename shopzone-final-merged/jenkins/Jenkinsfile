@@ -65,7 +65,7 @@ pipeline {
     // FIX 1: Use credentials() binding — never interpolate secrets directly in sh""" """
     // SONAR_TOKEN and GITHUB creds are bound inside steps using withCredentials()
     TRIVY_SEVERITY = 'CRITICAL'
-    ARGOCD_SERVER  = 'argocd-server.argocd.svc.cluster.local'
+    ARGOCD_SERVER  = 'a0befe6927d314ac5912ddf011ae5f3f-102417968.ap-south-1.elb.amazonaws.com'
     ARGOCD_APP     = 'shopzone'
     SLACK_CHANNEL  = '#shopzone-cicd'
   }
