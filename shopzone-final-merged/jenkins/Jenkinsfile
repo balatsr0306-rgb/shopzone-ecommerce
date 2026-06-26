@@ -62,8 +62,12 @@ pipeline {
     BACKEND_IMAGE  = "${ECR_REGISTRY}/shopzone-backend:${IMAGE_TAG}"
     FRONTEND_IMAGE = "${ECR_REGISTRY}/shopzone-frontend:${IMAGE_TAG}"
     SONAR_HOST_URL = 'http://sonarqube.sonarqube.svc.cluster.local:9000/sonar'
-    SONAR_TOKEN    = credentials('sonar-token')
+    // FIX 1: Use credentials() binding — never interpolate secrets directly in sh""" """
+    // SONAR_TOKEN and GITHUB creds are bound inside steps using withCredentials()
     TRIVY_SEVERITY = 'CRITICAL'
+    ARGOCD_SERVER  = 'argocd-server.argocd.svc.cluster.local'
+    ARGOCD_APP     = 'shopzone'
+    SLACK_CHANNEL  = '#shopzone-cicd'
   }
 
   options {
@@ -118,19 +122,24 @@ pipeline {
         stage('Backend SonarQube') {
           steps {
             container('sonar') {
-              dir('shopzone-final-merged/backend') {
-                sh """
-                  sonar-scanner \
-                    -Dsonar.projectKey=shopzone-backend \
-                    -Dsonar.projectName="ShopZone Backend" \
-                    -Dsonar.sources=src \
-                    -Dsonar.exclusions=node_modules/**,coverage/**,**/*.test.js \
-                    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                    -Dsonar.host.url=${SONAR_HOST_URL} \
-                    -Dsonar.login=${SONAR_TOKEN} \
-                    -Dsonar.qualitygate.wait=true \
-                    -Dsonar.qualitygate.timeout=120
-                """
+              // FIX 2: Use withCredentials + single-quote sh''' ''' to prevent
+              // Groovy interpolation of secrets. Also switched sonar.login ->
+              // sonar.token to eliminate the deprecation warning.
+              withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN_VAL')]) {
+                dir('shopzone-final-merged/backend') {
+                  sh '''
+                    sonar-scanner \
+                      -Dsonar.projectKey=shopzone-backend \
+                      -Dsonar.projectName="ShopZone Backend" \
+                      -Dsonar.sources=src \
+                      -Dsonar.exclusions=node_modules/**,coverage/**,**/*.test.js \
+                      -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                      -Dsonar.host.url=$SONAR_HOST_URL \
+                      -Dsonar.token=$SONAR_TOKEN_VAL \
+                      -Dsonar.qualitygate.wait=true \
+                      -Dsonar.qualitygate.timeout=120
+                  '''
+                }
               }
             }
           }
@@ -138,19 +147,21 @@ pipeline {
         stage('Frontend SonarQube') {
           steps {
             container('sonar') {
-              dir('shopzone-final-merged/frontend') {
-                sh """
-                  sonar-scanner \
-                    -Dsonar.projectKey=shopzone-frontend \
-                    -Dsonar.projectName="ShopZone Frontend" \
-                    -Dsonar.sources=src \
-                    -Dsonar.exclusions=node_modules/**,build/**,coverage/**,**/*.test.js \
-                    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
-                    -Dsonar.host.url=${SONAR_HOST_URL} \
-                    -Dsonar.login=${SONAR_TOKEN} \
-                    -Dsonar.qualitygate.wait=true \
-                    -Dsonar.qualitygate.timeout=120
-                """
+              withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN_VAL')]) {
+                dir('shopzone-final-merged/frontend') {
+                  sh '''
+                    sonar-scanner \
+                      -Dsonar.projectKey=shopzone-frontend \
+                      -Dsonar.projectName="ShopZone Frontend" \
+                      -Dsonar.sources=src \
+                      -Dsonar.exclusions=node_modules/**,build/**,coverage/**,**/*.test.js \
+                      -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+                      -Dsonar.host.url=$SONAR_HOST_URL \
+                      -Dsonar.token=$SONAR_TOKEN_VAL \
+                      -Dsonar.qualitygate.wait=true \
+                      -Dsonar.qualitygate.timeout=120
+                  '''
+                }
               }
             }
           }
@@ -191,143 +202,178 @@ pipeline {
       }
     }
 
-    stage('Trivy Backend') {
-    steps {
-        container('trivy') {
-            sh """
-              mkdir -p /tmp/trivy-backend
-              export TRIVY_CACHE_DIR=/tmp/trivy-backend
+    stage('Trivy Scan') {
+      parallel {
+        stage('Trivy Backend') {
+          steps {
+            container('trivy') {
+              sh """
+                mkdir -p /tmp/trivy-backend
+                export TRIVY_CACHE_DIR=/tmp/trivy-backend
 
-              trivy image \
-                --severity CRITICAL,HIGH,MEDIUM \
-                --format json \
-                --output trivy-backend-report.json \
-                --timeout 10m \
-                ${BACKEND_IMAGE} || true
+                trivy image \
+                  --severity CRITICAL,HIGH,MEDIUM \
+                  --format json \
+                  --output trivy-backend-report.json \
+                  --timeout 10m \
+                  ${BACKEND_IMAGE} || true
 
-              trivy image \
-                --severity ${TRIVY_SEVERITY} \
-                --exit-code 0 \
-                --timeout 10m \
-                ${BACKEND_IMAGE}
-            """
-        }
-    }
-    post {
-        always {
-            archiveArtifacts artifacts: 'trivy-backend-report.json', allowEmptyArchive: true
-        }
-    }
-}
-    stage('Trivy Frontend') {
-    steps {
-        container('trivy') {
-            sh """
-              mkdir -p /tmp/trivy-frontend
-              export TRIVY_CACHE_DIR=/tmp/trivy-frontend
-
-              trivy image \
-                --severity CRITICAL,HIGH,MEDIUM \
-                --format json \
-                --output trivy-frontend-report.json \
-                --timeout 10m \
-                ${FRONTEND_IMAGE} || true
-
-              trivy image \
-                --severity ${TRIVY_SEVERITY} \
-                --exit-code 0 \
-                --timeout 10m \
-                ${FRONTEND_IMAGE}
-            """
-        }
-    }
-    post {
-        always {
-            archiveArtifacts artifacts: 'trivy-frontend-report.json', allowEmptyArchive: true
-        }
-    }
-}
-    stage('Trivy Filesystem') {
-    steps {
-        container('trivy') {
-            sh """
-              mkdir -p /tmp/trivy-fs
-              export TRIVY_CACHE_DIR=/tmp/trivy-fs
-
-              trivy fs \
-                --severity CRITICAL,HIGH \
-                --format json \
-                --output trivy-fs-backend.json \
-                ./shopzone-final-merged/backend || true
-
-              trivy fs \
-                --severity CRITICAL,HIGH \
-                --format json \
-                --output trivy-fs-frontend.json \
-                ./shopzone-final-merged/frontend || true
-            """
-        }
-    }
-    post {
-        always {
-            archiveArtifacts artifacts: 'trivy-fs-*.json', allowEmptyArchive: true
-        }
-    }
-}
-    stage('Update Helm Values') {
-        steps {
-            container('kubectl') {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'github-token',
-                        usernameVariable: 'GITHUB_USER',
-                        passwordVariable: 'GITHUB_TOKEN'
-                    )
-                ]) {
-                    sh """
-                    pwd
-                    ls -la
-
-                    find . -name values.yaml
-
-                    git config --global --add safe.directory /home/jenkins/agent/workspace/shopzone-cicd
-
-                    git status
-                    git rev-parse --show-toplevel
-
-                    git fetch origin
-
-                    git checkout main || git checkout -b main origin/main
-
-                    git branch -a
-                    git status
-
-                    git pull origin main
-
-                    sed -i "s/tag:.*/tag: \\"${IMAGE_TAG}\\"/g" shopzone-final-merged/helm/shopzone/values.yaml
-
-                    git config user.email "jenkins@shopzone.com"
-                    git config user.name "Jenkins CI"
-
-                    git add shopzone-final-merged/helm/shopzone/values.yaml
-
-                    git diff --staged --quiet || \
-                    git commit -m "ci: update image tag ${IMAGE_TAG} [skip ci]"
-
-                    git push https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/balatsr0306-rgb/shopzone-ecommerce.git HEAD:main
-                    """
-                }
+                trivy image \
+                  --severity ${TRIVY_SEVERITY} \
+                  --exit-code 0 \
+                  --timeout 10m \
+                  ${BACKEND_IMAGE}
+              """
             }
+          }
+          post {
+            always {
+              archiveArtifacts artifacts: 'trivy-backend-report.json', allowEmptyArchive: true
+            }
+          }
         }
+        stage('Trivy Frontend') {
+          steps {
+            container('trivy') {
+              sh """
+                mkdir -p /tmp/trivy-frontend
+                export TRIVY_CACHE_DIR=/tmp/trivy-frontend
+
+                trivy image \
+                  --severity CRITICAL,HIGH,MEDIUM \
+                  --format json \
+                  --output trivy-frontend-report.json \
+                  --timeout 10m \
+                  ${FRONTEND_IMAGE} || true
+
+                trivy image \
+                  --severity ${TRIVY_SEVERITY} \
+                  --exit-code 0 \
+                  --timeout 10m \
+                  ${FRONTEND_IMAGE}
+              """
+            }
+          }
+          post {
+            always {
+              archiveArtifacts artifacts: 'trivy-frontend-report.json', allowEmptyArchive: true
+            }
+          }
+        }
+        stage('Trivy Filesystem') {
+          steps {
+            container('trivy') {
+              sh """
+                mkdir -p /tmp/trivy-fs
+                export TRIVY_CACHE_DIR=/tmp/trivy-fs
+
+                trivy fs \
+                  --severity CRITICAL,HIGH \
+                  --format json \
+                  --output trivy-fs-backend.json \
+                  ./shopzone-final-merged/backend || true
+
+                trivy fs \
+                  --severity CRITICAL,HIGH \
+                  --format json \
+                  --output trivy-fs-frontend.json \
+                  ./shopzone-final-merged/frontend || true
+              """
+            }
+          }
+          post {
+            always {
+              archiveArtifacts artifacts: 'trivy-fs-*.json', allowEmptyArchive: true
+            }
+          }
+        }
+      }
+    }
+
+    stage('Update Helm Values') {
+      steps {
+        container('kubectl') {
+          // FIX 3: Use withCredentials + sh''' ''' (single quotes) so that
+          // $GITHUB_TOKEN is resolved by the shell from the env, NOT by
+          // Groovy interpolation. This eliminates the secret-in-GString warning.
+          withCredentials([
+            usernamePassword(
+              credentialsId: 'github-token',
+              usernameVariable: 'GITHUB_USER',
+              passwordVariable: 'GITHUB_TOKEN'
+            )
+          ]) {
+            sh '''
+              git config --global --add safe.directory /home/jenkins/agent/workspace/shopzone-cicd
+
+              git fetch origin
+              git checkout main || git checkout -b main origin/main
+              git pull origin main
+
+              sed -i "s/tag:.*/tag: \\"''' + IMAGE_TAG + '''\\"/" shopzone-final-merged/helm/shopzone/values.yaml
+
+              git config user.email "jenkins@shopzone.com"
+              git config user.name "Jenkins CI"
+              git add shopzone-final-merged/helm/shopzone/values.yaml
+
+              git diff --staged --quiet || \
+                git commit -m "ci: update image tag ''' + IMAGE_TAG + ''' [skip ci]"
+
+              git push https://$GITHUB_USER:$GITHUB_TOKEN@github.com/balatsr0306-rgb/shopzone-ecommerce.git HEAD:main
+            '''
+          }
+        }
+      }
+    }
+
+    stage('ArgoCD Sync') {
+      // FIX 4: Wait for ArgoCD to detect the Helm values change and sync,
+      // then confirm the app is Healthy before marking the pipeline green.
+      steps {
+        container('kubectl') {
+          withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
+            sh '''
+              echo ">>> Triggering ArgoCD sync for app: $ARGOCD_APP"
+
+              # Install argocd CLI if not present
+              if ! command -v argocd &> /dev/null; then
+                curl -sSL -o /usr/local/bin/argocd \
+                  https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+                chmod +x /usr/local/bin/argocd
+              fi
+
+              argocd app sync $ARGOCD_APP \
+                --server $ARGOCD_SERVER \
+                --auth-token $ARGOCD_AUTH_TOKEN \
+                --insecure \
+                --timeout 120
+
+              echo ">>> Waiting for ArgoCD app to become Healthy..."
+              argocd app wait $ARGOCD_APP \
+                --server $ARGOCD_SERVER \
+                --auth-token $ARGOCD_AUTH_TOKEN \
+                --insecure \
+                --health \
+                --timeout 180
+
+              echo ">>> ArgoCD sync complete!"
+            '''
+          }
+        }
+      }
     }
 
     stage('Verify Deployment') {
       steps {
         container('kubectl') {
           sh '''
-            kubectl rollout status deployment/shopzone-backend -n shopzone --timeout=180s
+            echo ">>> Verifying rollout status..."
+            kubectl rollout status deployment/shopzone-backend  -n shopzone --timeout=180s
             kubectl rollout status deployment/shopzone-frontend -n shopzone --timeout=180s
-            echo "All pods healthy!"
+            echo ">>> All pods healthy!"
+
+            echo ">>> Current pod state:"
+            kubectl get pods -n shopzone -o wide
           '''
         }
       }
@@ -337,13 +383,36 @@ pipeline {
 
   post {
     success {
+      // FIX 5: Slack notification on success
+      slackSend(
+        channel: env.SLACK_CHANNEL,
+        color: 'good',
+        message: """
+*✅ ShopZone Build SUCCESS*
+*Job:* `${env.JOB_NAME}` | *Build:* `#${env.BUILD_NUMBER}` | *Tag:* `${env.IMAGE_TAG}`
+*Commit:* `${env.GIT_COMMIT?.take(7)}` on `${env.GIT_BRANCH}`
+*Duration:* ${currentBuild.durationString}
+<${env.BUILD_URL}|View Build>
+        """.stripIndent().trim()
+      )
       echo "Pipeline SUCCESS - Image Tag: ${IMAGE_TAG}"
     }
     failure {
+      // Slack notification on failure
+      slackSend(
+        channel: env.SLACK_CHANNEL,
+        color: 'danger',
+        message: """
+*❌ ShopZone Build FAILED*
+*Job:* `${env.JOB_NAME}` | *Build:* `#${env.BUILD_NUMBER}` | *Tag:* `${env.IMAGE_TAG}`
+*Commit:* `${env.GIT_COMMIT?.take(7)}` on `${env.GIT_BRANCH}`
+*Duration:* ${currentBuild.durationString}
+<${env.BUILD_URL}console|View Console Logs>
+        """.stripIndent().trim()
+      )
       echo "Pipeline FAILED"
     }
     always {
-      // publishHTML disabled
       echo "Pipeline finished - reports archived as artifacts"
     }
   }
